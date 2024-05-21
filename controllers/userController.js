@@ -52,6 +52,22 @@ const userController = {
             return res.status(500).json({ error: 'Internal server error' });
         }
     },    
+    storeEvent: async (req, res) => {
+        const { studentID, event , screenshot } = req.body;
+        try {
+            const user = await User.findOne({ studentID });
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            user.events.push(event);
+            user.screenshots.push(screenshot);
+            await user.save();
+            return res.status(200).json({ message: 'Event stored' });
+        } catch (error) {
+            console.error('Error storing event:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
 }
 
 
