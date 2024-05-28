@@ -109,8 +109,23 @@ const userController = {
             console.error('Error storing audio:', error);
             return res.status(500).json({ error: 'Internal server error' });
         }
-    }
-    
+    },
+    verifyImage: async (req, res) => {
+        const { studentID, capture } = req.body;
+        const student = User.findOne({studentID});
+        if (!student) {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        const capturedImageHash = await calculateImageHash(capture);
+        
+        const similarityThreshold = 0.9;
+        if (capturedImageHash === student.profilePic) {
+            return res.json({ success: true });
+        } else {
+            return res.json({ success: false });
+        }
+    },
 };
 
 module.exports = userController;

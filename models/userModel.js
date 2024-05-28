@@ -10,6 +10,10 @@ const userSchema = new mongoose.Schema({
         filePath: String,
         timestamp: { type: Date, default: Date.now }
     }],
+    profilePic: {
+        type: String,
+        required: true,
+    },
     audio : [{ type: String }]
 });
 
