@@ -3,61 +3,16 @@ const express = require('express');
 const robot = require('robotjs');
 const fs = require('fs');
 const path = require('path');
-const User = require('../models/userModel');
 const PNG = require('pngjs').PNG;
+const { captureScreenshot } = require('./utils');
+const User = require('../models/userModel');
+const Audio = require('../models/Audio');
 
 function isLocationDifferent(storedLocation, currentLocation) {
     const [storedLatitude, storedLongitude] = storedLocation.split(',').map(Number);
     const [currentLatitude, currentLongitude] = currentLocation.split(',').map(Number);
     return storedLatitude !== currentLatitude || storedLongitude !== currentLongitude;
 }
-
-
-const captureScreenshot = (studentID) => {
-    try {
-        // Capture the screenshot
-        const screenSize = robot.getScreenSize();
-        const screenshot = robot.screen.capture(0, 0, screenSize.width, screenSize.height);
-
-        // Save the screenshot to a file using pngjs
-        const timestamp = Date.now();
-        const folderPath = path.join(__dirname, 'screenshots', studentID);
-        const screenshotPath = path.join(folderPath, `screenshot_${timestamp}.png`);
-
-        // Create the folder if it doesn't exist
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
-        }
-
-        const png = new PNG({
-            width: screenshot.width,
-            height: screenshot.height,
-            inputHasAlpha: true,
-        });
-
-        // Convert the screenshot image to PNG format
-        for (let y = 0; y < screenshot.height; y++) {
-            for (let x = 0; x < screenshot.width; x++) {
-                const index = (screenshot.width * y + x) * 4;
-                png.data[index] = screenshot.image[index];
-                png.data[index + 1] = screenshot.image[index + 1];
-                png.data[index + 2] = screenshot.image[index + 2];
-                png.data[index + 3] = screenshot.image[index + 3];
-            }
-        }
-
-        png.pack().pipe(fs.createWriteStream(screenshotPath));
-
-        console.log(`Screenshot captured and saved to ${screenshotPath}`);
-
-        return screenshotPath;
-    } catch (error) {
-        console.error('Error capturing or saving screenshot:', error);
-        return null; // Return null to indicate failure
-    }
-};
-
-
 
 const userController = {
     storeIP: async (req, res) => {
@@ -66,8 +21,7 @@ const userController = {
             const user = new User(originalClientIP);
             await user.save();
             res.status(200).json({ message: "Successfully stored" });
-        }
-        catch (err) {
+        } catch (err) {
             console.log('Error : ' + err.message);
             res.status(500).json({ error: "Problem while storing client IP" });
         }
@@ -78,8 +32,7 @@ const userController = {
         try {
             await User.deleteOne({ studentID: studentID });
             res.status(200).json({ message: "Successfully deleted" });
-        }
-        catch (err) {
+        } catch (err) {
             console.log('Error: ' + err.message);
             res.status(500).json({ error: "Problem while removing client IP" });
         }
@@ -90,7 +43,6 @@ const userController = {
             const user = await User.findOne({ studentID: studentID });
 
             if (!user) {
-                // console.log(studentID);
                 return res.status(404).json({ error: 'User not found' });
             }
 
@@ -105,38 +57,60 @@ const userController = {
         }
     },
     storeEvent: async (req, res) => {
-        console.log("Call");
         const { studentID, event } = req.body;
-        
+        console.log(req.body.event);
         try {
-            console.log(studentID);
-            // console.log("fvfdvdfc");
-            const user = await User.findOne({ studentID: studentID })
-                .then(res => {
-                    if(!res)
-                        return res.status(404).json({ error: 'User not found' });
-                    return res;
-                });
-            // if (!req.file) {
-            //     return res.status(400).json({ error: 'No file uploaded' });
-            // }
-            console.log(user);
-            console.log("Hello");
+            const user = await User.findOne({ studentID: studentID });
+            // console.log(user);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
 
-            const screenshotPath = captureScreenshot(studentID);
-            console.log("After");
+            const screenshotData = captureScreenshot(studentID);
+            if (!screenshotData) {
+                return res.status(500).json({ error: 'Failed to capture screenshot' });
+            }
 
-            // user.events.push(event);
-            // user.screenshots.push(req.file.filename);
-            // await user.save();
+            user.events.push(event);
+            user.screenshots.push({
+                data: screenshotData.buffer,
+                contentType: 'image/png',
+                filePath: screenshotData.screenshotPath
+            });
+            await user.save();
 
+            console.log(`Event stored for user ${studentID}`);
             return res.status(200).json({ message: 'Event stored' });
         } catch (error) {
             console.error('Error storing event:', error);
             return res.status(500).json({ error: 'Internal server error' });
         }
+    },
+    storeAudio: async (req, res) => {
+        const { studentID, audio } = req.body;
+        console.log(req.body.audio);
+        try {
+            const audioBuffer = Buffer.from(audio, 'base64');
+            const timestamp = new Date().toISOString().replace(/[:.-]/g, '_');
+            const folderPath = path.join(__dirname, 'audio', studentID);
+            const audioPath = path.join(folderPath, `audio_${timestamp}.wav`);
+    
+            // Ensure the directory exists
+            if (!fs.existsSync(folderPath)) {
+                fs.mkdirSync(folderPath, { recursive: true });
+            }
+    
+            // Write the audio file
+            fs.writeFileSync(audioPath, audioBuffer);
+    
+            return res.status(200).json({ message: 'Audio stored', path: audioPath });
+    
+        } catch (error) {
+            console.error('Error storing audio:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
     }
-}
-
+    
+};
 
 module.exports = userController;
